@@ -1,3 +1,4 @@
+// client.ts
 import mqtt from "mqtt";
 import * as marketdata from "../proto/market_data_pb";
 import * as subscriptionManager from "./subscriptionManager";
@@ -54,19 +55,30 @@ export function processMessage(
       const parts = topic.split("/");
       if (parts.length < 2) return;
 
-      const indexName = parts[1];
-      indexLtpMap.set(indexName, ltp);
+      const topicSuffix = parts[1];
+      const isOption = topicSuffix.startsWith("NSE_FO|");
 
-      if (subscriptionManager.isFirstIndexMessage.get(indexName) === true) {
-        const atmStrike = utils.getAtmStrike(indexName, ltp);
-        atmStrikeMap.set(indexName, atmStrike);
+      if (isOption) {
+        const optionMeta = subscriptionManager.optionTopicMapping.get(topicSuffix);
+        if (optionMeta) {
+          db.saveToDatabase(`index/${topicSuffix}`, ltp, optionMeta.indexName, optionMeta.type, optionMeta.strike);
+        } else {
+          db.saveToDatabase(`index/${topicSuffix}`, ltp);
+        }
+      } else {
+        const indexName = topicSuffix.toUpperCase();
+        indexLtpMap.set(indexName, ltp);
 
-        subscriptionManager.subscribeToAtmOptions(client, indexName, atmStrike);
+        if (subscriptionManager.isFirstIndexMessage.get(indexName) === true) {
+          const atmStrike = utils.getAtmStrike(indexName, ltp);
+          atmStrikeMap.set(indexName, atmStrike);
 
-        subscriptionManager.isFirstIndexMessage.set(indexName, false);
+          subscriptionManager.subscribeToAtmOptions(client, indexName, atmStrike);
+          subscriptionManager.isFirstIndexMessage.set(indexName, false);
+        }
+
+        db.saveToDatabase(`index/${indexName}`, ltp, indexName, undefined, );
       }
-
-      db.saveToDatabase(topic, ltp, indexName);
     }
   } catch (error) {
     console.error("Error processing message:", error);

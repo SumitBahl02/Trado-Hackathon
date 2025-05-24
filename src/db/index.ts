@@ -1,3 +1,4 @@
+// db/index.ts
 import { Pool } from "pg";
 import { config } from "../config";
 
@@ -116,6 +117,23 @@ export async function flushBatch() {
   console.log(`Flushing ${dataBatch.length} items to database...`);
   const dataToFlush = [...dataBatch]; 
   dataBatch = []; // reset the batch
+
+
+// HERE THE TOPIC ID MAP CODE 
+  const topicIdMap = new Map<string, number>();
+  for (const item of dataToFlush) {
+    if (!topicIdMap.has(item.topic)) {
+      const topicId = await getTopicId(
+        item.topic,
+        item.indexName,
+        item.type,
+        item.strike,
+      );
+      topicIdMap.set(item.topic, topicId);
+    }
+  }
+
+
   const client = await pool.connect();
   try {
     // Use transaction for consistency
